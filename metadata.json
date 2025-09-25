@@ -1,0 +1,7 @@
+{
+  "name": "Reading Log",
+  "description": "An application to log the books you've read, save memorable sentences from them, and easily search through your collection of quotes.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
