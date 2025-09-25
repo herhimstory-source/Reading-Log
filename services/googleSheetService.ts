@@ -1,4 +1,3 @@
-import { GOOGLE_SHEET_API_URL } from '../config';
 import type { Book, Sentence } from '../types';
 
 interface FetchDataResponse {
@@ -7,8 +6,8 @@ interface FetchDataResponse {
 }
 
 // Generic function to handle POST requests to our Apps Script
-const postToAction = async (action: string, data: any) => {
-  const response = await fetch(GOOGLE_SHEET_API_URL, {
+const postToAction = async (sheetUrl: string, action: string, data: any) => {
+  const response = await fetch(sheetUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'text/plain;charset=utf-8', // Apps Script web apps expect text/plain for POST
@@ -17,33 +16,37 @@ const postToAction = async (action: string, data: any) => {
     mode: 'cors',
   });
   if (!response.ok) {
-    throw new Error(`Failed to ${action}`);
+    const errorText = await response.text();
+    console.error(`Failed to ${action}. Response:`, errorText);
+    throw new Error(`Failed to ${action}. Status: ${response.status}`);
   }
   return await response.json();
 }
 
 export const googleSheetService = {
-  getData: async (): Promise<FetchDataResponse> => {
-    const response = await fetch(GOOGLE_SHEET_API_URL, { mode: 'cors' });
+  getData: async (sheetUrl: string): Promise<FetchDataResponse> => {
+    const response = await fetch(sheetUrl, { mode: 'cors' });
      if (!response.ok) {
-      throw new Error('Failed to fetch data from Google Sheet.');
+      const errorText = await response.text();
+      console.error('Failed to fetch data. Response:', errorText);
+      throw new Error(`Failed to fetch data from Google Sheet. Status: ${response.status}`);
     }
     return await response.json();
   },
 
-  addBook: async (book: Book): Promise<any> => {
-    return postToAction('ADD_BOOK', book);
+  addBook: async (sheetUrl: string, book: Book): Promise<any> => {
+    return postToAction(sheetUrl, 'ADD_BOOK', book);
   },
 
-  addSentence: async (sentence: Sentence): Promise<any> => {
-    return postToAction('ADD_SENTENCE', sentence);
+  addSentence: async (sheetUrl: string, sentence: Sentence): Promise<any> => {
+    return postToAction(sheetUrl, 'ADD_SENTENCE', sentence);
   },
 
-  deleteBook: async (bookId: string): Promise<any> => {
-     return postToAction('DELETE_BOOK', { bookId });
+  deleteBook: async (sheetUrl: string, bookId: string): Promise<any> => {
+     return postToAction(sheetUrl, 'DELETE_BOOK', { bookId });
   },
 
-  deleteSentence: async (sentenceId: string): Promise<any> => {
-    return postToAction('DELETE_SENTENCE', { sentenceId });
+  deleteSentence: async (sheetUrl: string, sentenceId: string): Promise<any> => {
+    return postToAction(sheetUrl, 'DELETE_SENTENCE', { sentenceId });
   },
 };

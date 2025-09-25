@@ -9,13 +9,16 @@ import SearchResults from './components/SearchResults';
 import BookSearchResults from './components/BookSearchResults';
 import { BookOpenIcon, LoadingSpinnerIcon, CodeIcon } from './components/icons';
 import { googleSheetService } from './services/googleSheetService';
-import { GOOGLE_SHEET_API_URL } from './config';
 import { useTheme } from './hooks/useTheme';
 import ThemeToggle from './components/ThemeToggle';
 import CodeViewer from './components/CodeViewer';
+import { useGoogleSheetUrl } from './hooks/useGoogleSheetUrl';
+import ConfigurationGuide from './components/ConfigurationGuide';
 
 const App: React.FC = () => {
-  useTheme(); // Initialize theme hook to set the class on the HTML element
+  useTheme(); // Initialize theme hook
+  const [sheetUrl, setSheetUrl, isConfigured] = useGoogleSheetUrl();
+  
   const [books, setBooks] = useState<Book[]>([]);
   const [sentences, setSentences] = useState<Sentence[]>([]);
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
@@ -28,30 +31,28 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isCodeViewerVisible, setIsCodeViewerVisible] = useState(false);
   
-  // Fetch initial data from Google Sheet
   useEffect(() => {
+    if (!isConfigured) {
+      setIsLoading(false);
+      return;
+    }
+    
     const fetchData = async () => {
-      if (!GOOGLE_SHEET_API_URL || GOOGLE_SHEET_API_URL.includes('여기에_배포된_웹_앱_URL을_붙여넣으세요') || GOOGLE_SHEET_API_URL.includes('d/1wwimPz25JIoWNHC30-amPjrtBxBIrStm_uLMSLDKXMo')) {
-        setError('Configuration needed: Please update the `config.ts` file with your Google Apps Script Web App URL.');
-        setIsLoading(false);
-        return;
-      }
-      
       try {
         setIsLoading(true);
         setError(null);
-        const { books, sentences } = await googleSheetService.getData();
+        const { books, sentences } = await googleSheetService.getData(sheetUrl);
         setBooks(books || []);
         setSentences(sentences || []);
       } catch (err) {
         console.error(err);
-        setError('Failed to load data. Please check your browser\'s console for details. Common issues: 1) Incorrect Web App URL in config.ts. 2) Incorrect Apps Script deployment settings (access must be "Anyone"). 3) Network problems.');
+        setError('Failed to load data. Please check the Web App URL and your browser\'s console for details. Common issues: 1) Incorrect URL. 2) The Apps Script deployment "Who has access" is not set to "Anyone". 3) The script was updated but not re-deployed.');
       } finally {
         setIsLoading(false);
       }
     };
     fetchData();
-  }, []);
+  }, [isConfigured, sheetUrl]);
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -66,7 +67,7 @@ const App: React.FC = () => {
       createdAt: new Date().toISOString(),
     };
     try {
-      await googleSheetService.addBook(newBook);
+      await googleSheetService.addBook(sheetUrl, newBook);
       setBooks(prevBooks => [...prevBooks, newBook]);
     } catch (error) {
       console.error("Failed to add book:", error);
@@ -76,7 +77,7 @@ const App: React.FC = () => {
 
   const deleteBook = async (bookId: string) => {
     try {
-      await googleSheetService.deleteBook(bookId);
+      await googleSheetService.deleteBook(sheetUrl, bookId);
       setBooks(prevBooks => prevBooks.filter(book => book.id !== bookId));
       setSentences(prevSentences => prevSentences.filter(s => s.bookId !== bookId));
       setSelectedBookId(null);
@@ -95,7 +96,7 @@ const App: React.FC = () => {
       createdAt: new Date().toISOString(),
     };
     try {
-       await googleSheetService.addSentence(newSentence);
+       await googleSheetService.addSentence(sheetUrl, newSentence);
        setSentences(prev => [...prev, newSentence]);
     } catch (error) {
        console.error("Failed to add sentence:", error);
@@ -105,7 +106,7 @@ const App: React.FC = () => {
 
   const deleteSentence = async (sentenceId: string) => {
     try {
-      await googleSheetService.deleteSentence(sentenceId);
+      await googleSheetService.deleteSentence(sheetUrl, sentenceId);
       setSentences(prev => prev.filter(s => s.id !== sentenceId));
     } catch (error) {
       console.error("Failed to delete sentence:", error);
@@ -140,7 +141,8 @@ const App: React.FC = () => {
         return `data:image/png;base64,${base64ImageBytes}`;
       }
       return null;
-    } catch (error) {
+    }
+    catch (error) {
       console.error("Error generating cover:", error);
       return null;
     }
@@ -297,8 +299,8 @@ const App: React.FC = () => {
                 setSentences(prev => [...prev, ...newSentencesToAdd]);
 
                 await Promise.all([
-                    ...newBooksToAdd.map(b => googleSheetService.addBook(b)),
-                    ...newSentencesToAdd.map(s => googleSheetService.addSentence(s)),
+                    ...newBooksToAdd.map(b => googleSheetService.addBook(sheetUrl, b)),
+                    ...newSentencesToAdd.map(s => googleSheetService.addSentence(sheetUrl, s)),
                 ]);
 
                 alert(`Successfully imported ${newBooksToAdd.length} new book(s) and ${newSentencesToAdd.length} new sentence(s).`);
@@ -392,6 +394,10 @@ const App: React.FC = () => {
   }, [books, bookSortBy]);
 
   const renderContent = () => {
+    if (!isConfigured) {
+      return <ConfigurationGuide onSave={setSheetUrl} />
+    }
+
     if (isLoading) {
       return (
         <div className="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400">
@@ -492,9 +498,11 @@ const App: React.FC = () => {
         <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {renderContent()}
         </main>
-        <footer className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 text-center text-gray-500 dark:text-gray-400 text-sm">
-          <p>Created with passion for reading.</p>
-        </footer>
+        {isConfigured && (
+          <footer className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 text-center text-gray-500 dark:text-gray-400 text-sm">
+            <p>Created with passion for reading.</p>
+          </footer>
+        )}
       </div>
       <CodeViewer isOpen={isCodeViewerVisible} onClose={() => setIsCodeViewerVisible(false)} />
     </div>
